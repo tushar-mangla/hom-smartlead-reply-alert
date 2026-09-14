@@ -1,4 +1,8 @@
+import sys
+import os
 import logging
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from flask import Flask, request, jsonify
 from config import Config
 from notifier import send_reply_notification
