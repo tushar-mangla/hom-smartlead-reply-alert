@@ -226,12 +226,33 @@ def process_all_requests(path=""):
         if request.method == "GET":
             recipients = Config.get_recipient_emails()
             target_campaign = Config.CAMPAIGN_ID() or "(All campaigns)"
+            
+            # Check presence of all key environment variables
+            env_status = {
+                "SMARTLEAD_API_KEY_configured": bool(Config.SMARTLEAD_API_KEY()),
+                "CAMPAIGN_ID": target_campaign,
+                "RECIPIENT_EMAILS_count": len(recipients),
+                "RECIPIENT_EMAILS": recipients,
+                "SMTP_HOST": Config.SMTP_HOST(),
+                "SMTP_PORT": Config.SMTP_PORT(),
+                "SMTP_USER_configured": bool(Config.SMTP_USER()),
+                "SMTP_PASS_configured": bool(Config.SMTP_PASSWORD()),
+                "SENDER_EMAIL": Config.SENDER_EMAIL()
+            }
+            
+            all_configured = (
+                bool(Config.SMARTLEAD_API_KEY()) and
+                bool(Config.CAMPAIGN_ID()) and
+                len(recipients) > 0 and
+                bool(Config.SMTP_USER()) and
+                bool(Config.SMTP_PASSWORD())
+            )
+            
             return jsonify({
                 "status": "online",
                 "service": "Smartlead Reply Email Notifier",
-                "target_campaign_id": target_campaign,
-                "recipient_count": len(recipients),
-                "recipients": recipients
+                "all_env_vars_configured": all_configured,
+                "environment_details": env_status
             }), 200
 
         secret = Config.WEBHOOK_SECRET()
