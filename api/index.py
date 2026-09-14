@@ -216,7 +216,7 @@ def extract_payload_data(payload: dict) -> dict:
         "event_type": event_type
     }
 
-def handle_webhook_request():
+def process_webhook():
     if request.method == "GET":
         recipients = Config.get_recipient_emails()
         target_campaign = Config.CAMPAIGN_ID() or "(All campaigns)"
@@ -266,10 +266,18 @@ def handle_webhook_request():
 
     return jsonify({"status": "processed", "notification_result": result}), 200
 
-@app.route("/", defaults={"path": ""}, methods=["GET", "POST"])
-@app.route("/<path:path>", methods=["GET", "POST"])
-def catch_all(path):
-    return handle_webhook_request()
+@app.route("/", methods=["GET", "POST"])
+@app.route("/webhook/smartlead", methods=["GET", "POST"])
+@app.route("/api", methods=["GET", "POST"])
+@app.route("/api/index", methods=["GET", "POST"])
+@app.route("/api/index.py", methods=["GET", "POST"])
+@app.route("/api/webhook/smartlead", methods=["GET", "POST"])
+def webhook_handler():
+    return process_webhook()
+
+@app.errorhandler(404)
+def handle_404(e):
+    return process_webhook()
 
 # Vercel entrypoint export
 handler = app
