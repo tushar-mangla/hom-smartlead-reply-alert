@@ -87,7 +87,7 @@ def send_reply_notification(
     recipients = Config.get_recipient_emails()
     if not recipients:
         logger.warning("No recipient emails configured.")
-        return {"status": "error", "message": "No recipients configured"}
+        return {"status": "error", "message": "No recipients configured in Vercel Environment Variables"}
 
     smtp_user = Config.SMTP_USER()
     smtp_password = Config.SMTP_PASSWORD()
@@ -216,24 +216,17 @@ def extract_payload_data(payload: dict) -> dict:
         "event_type": event_type
     }
 
-@app.route("/", methods=["GET"])
-@app.route("/api", methods=["GET"])
-def health_check():
-    recipients = Config.get_recipient_emails()
-    target_campaign = Config.CAMPAIGN_ID() or "(All campaigns)"
-    return jsonify({
-        "status": "online",
-        "service": "Smartlead Reply Email Notifier",
-        "target_campaign_id": target_campaign,
-        "recipient_count": len(recipients),
-        "recipients": recipients
-    }), 200
-
-@app.route("/webhook/smartlead", methods=["GET", "POST"])
-@app.route("/api/webhook/smartlead", methods=["GET", "POST"])
-def smartlead_webhook():
+def handle_webhook_request():
     if request.method == "GET":
-        return jsonify({"status": "online", "message": "Smartlead Webhook Endpoint Ready"}), 200
+        recipients = Config.get_recipient_emails()
+        target_campaign = Config.CAMPAIGN_ID() or "(All campaigns)"
+        return jsonify({
+            "status": "online",
+            "service": "Smartlead Reply Email Notifier",
+            "target_campaign_id": target_campaign,
+            "recipient_count": len(recipients),
+            "recipients": recipients
+        }), 200
 
     secret = Config.WEBHOOK_SECRET()
     if secret:
@@ -272,6 +265,11 @@ def smartlead_webhook():
     )
 
     return jsonify({"status": "processed", "notification_result": result}), 200
+
+@app.route("/", defaults={"path": ""}, methods=["GET", "POST"])
+@app.route("/<path:path>", methods=["GET", "POST"])
+def catch_all(path):
+    return handle_webhook_request()
 
 # Vercel entrypoint export
 handler = app
