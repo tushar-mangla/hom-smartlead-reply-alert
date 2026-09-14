@@ -134,7 +134,7 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
     """
 
     if not smtp_user or not smtp_password:
-        return {"status": "error", "message": "SMTP credentials missing in environment variables"}
+        return {"status": "error", "message": "SMTP credentials missing"}
 
     successful_sends = []
     failed_sends = []
@@ -217,9 +217,11 @@ def extract_payload_data(payload: dict) -> dict:
         "smartlead_lead_url": smartlead_lead_url
     }
 
-@app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'OPTIONS'])
-@app.route('/<path:path>', methods=['GET', 'POST', 'OPTIONS'])
-def catch_all(path=""):
+ALL_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"]
+
+@app.route("/", defaults={"path": ""}, methods=ALL_METHODS)
+@app.route("/<path:path>", methods=ALL_METHODS)
+def process_all_requests(path=""):
     try:
         if request.method == "GET":
             recipients = Config.get_recipient_emails()
