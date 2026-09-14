@@ -266,17 +266,9 @@ def process_webhook():
 
     return jsonify({"status": "processed", "notification_result": result}), 200
 
-@app.route("/", methods=["GET", "POST"])
-@app.route("/webhook/smartlead", methods=["GET", "POST"])
-@app.route("/api", methods=["GET", "POST"])
-@app.route("/api/index", methods=["GET", "POST"])
-@app.route("/api/index.py", methods=["GET", "POST"])
-@app.route("/api/webhook/smartlead", methods=["GET", "POST"])
-def webhook_handler():
-    return process_webhook()
-
-@app.errorhandler(404)
-def handle_404(e):
+@app.route("/", defaults={"path": ""}, methods=["GET", "POST", "OPTIONS"])
+@app.route("/<path:path>", methods=["GET", "POST", "OPTIONS"])
+def catch_all(path):
     return process_webhook()
 
 # Vercel entrypoint export
