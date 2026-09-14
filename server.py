@@ -91,7 +91,7 @@ def extract_payload_data(payload: dict) -> dict:
 @app.route("/", methods=["GET"])
 def health_check():
     recipients = Config.get_recipient_emails()
-    target_campaign = Config.CAMPAIGN_ID or "(All campaigns)"
+    target_campaign = Config.CAMPAIGN_ID() or "(All campaigns)"
     return jsonify({
         "status": "online",
         "service": "Smartlead Reply Email Notifier",
@@ -100,15 +100,22 @@ def health_check():
         "recipients": recipients
     }), 200
 
-@app.route("/webhook/smartlead", methods=["POST"])
+@app.route("/webhook/smartlead", methods=["GET", "POST"])
 def smartlead_webhook():
     """
-    Webhook endpoint to receive POST events from Smartlead.
+    Webhook endpoint to receive POST events (and GET verification requests) from Smartlead.
     """
+    if request.method == "GET":
+        return jsonify({
+            "status": "online",
+            "message": "Smartlead Webhook Endpoint Ready"
+        }), 200
+
     # Optional secret verification if configured
-    if Config.WEBHOOK_SECRET:
+    secret = Config.WEBHOOK_SECRET()
+    if secret:
         token = request.headers.get("X-Webhook-Secret") or request.args.get("secret")
-        if token != Config.WEBHOOK_SECRET:
+        if token != secret:
             logger.warning("Unauthorized webhook request: Invalid secret token.")
             return jsonify({"status": "error", "message": "Unauthorized"}), 401
 
@@ -119,14 +126,14 @@ def smartlead_webhook():
 
     incoming_campaign_id = extracted["campaign_id"]
     lead_email = extracted["lead_email"]
-    target_campaign_id = Config.CAMPAIGN_ID
+    target_campaign_id = Config.CAMPAIGN_ID()
 
     logger.info(f"Parsed Webhook -> Event: {extracted['event_type']}, Campaign ID: {incoming_campaign_id}, Lead: {lead_email}")
 
     # Campaign Filtering Logic
     if target_campaign_id and target_campaign_id != "*":
         allowed_campaign_ids = [c.strip() for c in target_campaign_id.split(",") if c.strip()]
-        if incoming_campaign_id not in allowed_campaign_ids:
+        if incoming_campaign_id and incoming_campaign_id not in allowed_campaign_ids:
             logger.info(f"Skipping notification: Incoming campaign ID '{incoming_campaign_id}' does not match target '{target_campaign_id}'")
             return jsonify({
                 "status": "ignored",
@@ -156,7 +163,9 @@ def smartlead_webhook():
     }), 200
 
 if __name__ == "__main__":
-    logger.info(f"Starting Smartlead Webhook Listener on {Config.WEBHOOK_HOST}:{Config.WEBHOOK_PORT}")
-    logger.info(f"Monitoring Campaign ID: {Config.CAMPAIGN_ID or 'ALL'}")
+    host = Config.WEBHOOK_HOST()
+    port = Config.WEBHOOK_PORT()
+    logger.info(f"Starting Smartlead Webhook Listener on {host}:{port}")
+    logger.info(f"Monitoring Campaign ID: {Config.CAMPAIGN_ID() or 'ALL'}")
     logger.info(f"Notifying Recipients: {Config.get_recipient_emails()}")
-    app.run(host=Config.WEBHOOK_HOST, port=Config.WEBHOOK_PORT, debug=False)
+    app.run(host=host, port=port, debug=False)

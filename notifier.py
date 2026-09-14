@@ -27,6 +27,13 @@ def send_reply_notification(
         logger.warning("No recipient emails configured in RECIPIENT_EMAILS env variable.")
         return {"status": "error", "message": "No recipients configured"}
 
+    smtp_user = Config.SMTP_USER()
+    smtp_password = Config.SMTP_PASSWORD()
+    smtp_host = Config.SMTP_HOST()
+    smtp_port = Config.SMTP_PORT()
+    sender_email = Config.SENDER_EMAIL()
+    sender_name = Config.SENDER_NAME()
+
     lead_name = f"{lead_first_name or ''} {lead_last_name or ''}".strip() or "Unknown Lead"
     campaign_title = campaign_name or (f"Campaign #{campaign_id}" if campaign_id else "Smartlead Campaign")
     clean_reply_body = (reply_body or "No text content provided").strip()
@@ -179,11 +186,11 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
     """
 
     # Check if SMTP configuration is set
-    if not Config.SMTP_USER or not Config.SMTP_PASSWORD:
+    if not smtp_user or not smtp_password:
         logger.error("SMTP_USER or SMTP_PASSWORD not set in environment.")
         return {
             "status": "error",
-            "message": "SMTP credentials missing in environment (.env). Please set SMTP_USER and SMTP_PASSWORD.",
+            "message": "SMTP credentials missing in environment (.env or Vercel). Please set SMTP_USER and SMTP_PASSWORD.",
             "recipients_attempted": recipients,
         }
 
@@ -192,25 +199,25 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
 
     try:
         # Establish SMTP connection
-        if Config.SMTP_PORT == 465:
-            server = smtplib.SMTP_SSL(Config.SMTP_HOST, Config.SMTP_PORT, timeout=15)
+        if smtp_port == 465:
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
         else:
-            server = smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT, timeout=15)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
             server.starttls()
 
-        server.login(Config.SMTP_USER, Config.SMTP_PASSWORD)
+        server.login(smtp_user, smtp_password)
 
         for recipient in recipients:
             try:
                 msg = MIMEMultipart("alternative")
                 msg["Subject"] = subject
-                msg["From"] = f"{Config.SENDER_NAME} <{Config.SENDER_EMAIL}>"
+                msg["From"] = f"{sender_name} <{sender_email}>"
                 msg["To"] = recipient
 
                 msg.attach(MIMEText(plain_body, "plain", "utf-8"))
                 msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-                server.sendmail(Config.SENDER_EMAIL, recipient, msg.as_string())
+                server.sendmail(sender_email, recipient, msg.as_string())
                 successful_sends.append(recipient)
                 logger.info(f"Successfully sent reply notification to {recipient}")
             except Exception as send_err:
