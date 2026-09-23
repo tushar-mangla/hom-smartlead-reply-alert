@@ -21,42 +21,45 @@ def safe_int(val, default: int = 587) -> int:
 class Config:
     @classmethod
     def SMARTLEAD_API_KEY(cls) -> str:
-        return safe_str(os.getenv("SMARTLEAD_API_KEY"), "")
+        return safe_str(os.getenv("SMARTLEAD_API_KEY"), "6cb12a01-912e-4e93-a24b-3f146b7df3e2_wqqlhxf")
 
     @classmethod
     def CAMPAIGN_ID(cls) -> str:
-        return safe_str(os.getenv("CAMPAIGN_ID"), "")
+        return safe_str(os.getenv("CAMPAIGN_ID"), "3921933")
 
     @classmethod
     def get_recipient_emails(cls) -> List[str]:
-        raw = safe_str(os.getenv("RECIPIENT_EMAILS"), "")
+        raw = safe_str(
+            os.getenv("RECIPIENT_EMAILS"),
+            "vivekans2016@gmail.com,tushar.mangla1120@gmail.com,kshitiz100mit@gmail.com"
+        )
         if not raw:
             return []
         return [email.strip() for email in raw.split(",") if email.strip()]
 
     @classmethod
     def SMTP_HOST(cls) -> str:
-        return safe_str(os.getenv("SMTP_HOST"), "smtp.gmail.com")
+        return safe_str(os.getenv("SMTP_HOST"), "smtp.migadu.com")
 
     @classmethod
     def SMTP_PORT(cls) -> int:
-        return safe_int(os.getenv("SMTP_PORT"), 587)
+        return safe_int(os.getenv("SMTP_PORT"), 465)
 
     @classmethod
     def SMTP_USER(cls) -> str:
-        return safe_str(os.getenv("SMTP_USER"), "")
+        return safe_str(os.getenv("SMTP_USER"), "steven@smallgrp.agency")
 
     @classmethod
     def SMTP_PASSWORD(cls) -> str:
-        return safe_str(os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS"), "")
+        return safe_str(os.getenv("SMTP_PASSWORD") or os.getenv("SMTP_PASS"), "Smallgrp@B8")
 
     @classmethod
     def SENDER_EMAIL(cls) -> str:
-        return safe_str(os.getenv("SENDER_EMAIL") or os.getenv("SMTP_USER"), "")
+        return safe_str(os.getenv("SENDER_EMAIL") or os.getenv("SMTP_USER"), "steven@smallgrp.agency")
 
     @classmethod
     def SENDER_NAME(cls) -> str:
-        return safe_str(os.getenv("SENDER_NAME"), "Smartlead Reply Alert")
+        return safe_str(os.getenv("SENDER_NAME"), "Smartlead Reply Notifier")
 
     @classmethod
     def WEBHOOK_PORT(cls) -> int:
