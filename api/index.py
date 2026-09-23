@@ -87,7 +87,7 @@ def send_reply_notification(
 ) -> Dict[str, Any]:
     recipients = Config.get_recipient_emails()
     if not recipients:
-        return {"status": "error", "message": "No recipients configured in Vercel Environment Variables"}
+        return {"status": "error", "message": "No recipients configured"}
 
     smtp_user = Config.SMTP_USER()
     smtp_password = Config.SMTP_PASSWORD()
@@ -173,14 +173,8 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
     return {"status": "success", "successful_sends": successful_sends, "failed_sends": failed_sends}
 
 def extract_payload_data(payload: dict) -> dict:
-    if not isinstance(payload, dict):
-        payload = {}
     data = payload.get("data", payload) if isinstance(payload, dict) else {}
-    if not isinstance(data, dict):
-        data = {}
     lead = data.get("lead", {}) if isinstance(data, dict) else {}
-    if not isinstance(lead, dict):
-        lead = {}
 
     raw_campaign_id = data.get("campaign_id") or payload.get("campaign_id") or data.get("campaignId")
     campaign_id = str(raw_campaign_id).strip() if raw_campaign_id is not None else ""
@@ -220,92 +214,62 @@ def extract_payload_data(payload: dict) -> dict:
         "smartlead_lead_url": smartlead_lead_url
     }
 
-ALL_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"]
+@app.route("/", methods=["GET"])
+@app.route("/api", methods=["GET"])
+@app.route("/api/index", methods=["GET"])
+def health_check():
+    recipients = Config.get_recipient_emails()
+    target_campaign = Config.CAMPAIGN_ID() or "(All campaigns)"
+    return jsonify({
+        "status": "online",
+        "service": "Smartlead Reply Email Notifier",
+        "target_campaign_id": target_campaign,
+        "recipient_count": len(recipients),
+        "recipients": recipients
+    }), 200
 
-@app.route("/", defaults={"path": ""}, methods=ALL_METHODS)
-@app.route("/webhook/smartlead", methods=ALL_METHODS)
-@app.route("/api", methods=ALL_METHODS)
-@app.route("/api/index", methods=ALL_METHODS)
-@app.route("/api/index.py", methods=ALL_METHODS)
-@app.route("/api/webhook/smartlead", methods=ALL_METHODS)
-@app.route("/<path:path>", methods=ALL_METHODS)
-def process_all_requests(path=""):
-    try:
-        if request.method == "GET":
-            recipients = Config.get_recipient_emails()
-            target_campaign = Config.CAMPAIGN_ID() or "(All campaigns)"
-            
-            # Check presence of all key environment variables
-            env_status = {
-                "SMARTLEAD_API_KEY_configured": bool(Config.SMARTLEAD_API_KEY()),
-                "CAMPAIGN_ID": target_campaign,
-                "RECIPIENT_EMAILS_count": len(recipients),
-                "RECIPIENT_EMAILS": recipients,
-                "SMTP_HOST": Config.SMTP_HOST(),
-                "SMTP_PORT": Config.SMTP_PORT(),
-                "SMTP_USER_configured": bool(Config.SMTP_USER()),
-                "SMTP_PASS_configured": bool(Config.SMTP_PASSWORD()),
-                "SENDER_EMAIL": Config.SENDER_EMAIL()
-            }
-            
-            all_configured = (
-                bool(Config.SMARTLEAD_API_KEY()) and
-                bool(Config.CAMPAIGN_ID()) and
-                len(recipients) > 0 and
-                bool(Config.SMTP_USER()) and
-                bool(Config.SMTP_PASSWORD())
-            )
-            
+@app.route("/webhook/smartlead", methods=["GET", "POST"])
+@app.route("/api/webhook/smartlead", methods=["GET", "POST"])
+def smartlead_webhook():
+    if request.method == "GET":
+        return jsonify({"status": "online", "message": "Smartlead Webhook Endpoint Ready"}), 200
+
+    secret = Config.WEBHOOK_SECRET()
+    if secret:
+        token = request.headers.get("X-Webhook-Secret") or request.args.get("secret")
+        if token != secret:
+            return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    extracted = extract_payload_data(payload)
+
+    incoming_campaign_id = extracted["campaign_id"]
+    lead_email = extracted["lead_email"]
+    target_campaign_id = Config.CAMPAIGN_ID()
+
+    if target_campaign_id and target_campaign_id != "*":
+        allowed_campaign_ids = [c.strip() for c in target_campaign_id.split(",") if c.strip()]
+        if incoming_campaign_id and incoming_campaign_id not in allowed_campaign_ids:
             return jsonify({
-                "status": "online",
-                "service": "Smartlead Reply Email Notifier",
-                "all_env_vars_configured": all_configured,
-                "environment_details": env_status
+                "status": "ignored",
+                "message": f"Campaign ID {incoming_campaign_id} does not match targeted campaign(s): {target_campaign_id}"
             }), 200
 
-        secret = Config.WEBHOOK_SECRET()
-        if secret:
-            token = request.headers.get("X-Webhook-Secret") or request.args.get("secret")
-            if token != secret:
-                return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    if not lead_email:
+        return jsonify({"status": "ignored", "message": "No lead email in payload"}), 200
 
-        payload = request.get_json(silent=True) or {}
-        extracted = extract_payload_data(payload)
+    result = send_reply_notification(
+        lead_email=lead_email,
+        lead_first_name=extracted["lead_first_name"],
+        lead_last_name=extracted["lead_last_name"],
+        campaign_name=extracted["campaign_name"],
+        campaign_id=incoming_campaign_id,
+        reply_body=extracted["reply_body"],
+        reply_time=extracted["reply_time"],
+        smartlead_lead_url=extracted["smartlead_lead_url"]
+    )
 
-        incoming_campaign_id = extracted["campaign_id"]
-        lead_email = extracted["lead_email"]
-        target_campaign_id = Config.CAMPAIGN_ID()
-
-        if target_campaign_id and target_campaign_id != "*":
-            allowed_campaign_ids = [c.strip() for c in target_campaign_id.split(",") if c.strip()]
-            if incoming_campaign_id and incoming_campaign_id not in allowed_campaign_ids:
-                return jsonify({
-                    "status": "ignored",
-                    "message": f"Campaign ID '{incoming_campaign_id}' does not match targeted campaign(s): {target_campaign_id}"
-                }), 200
-
-        if not lead_email:
-            return jsonify({"status": "received", "message": "Webhook ping received (no lead email provided)"}), 200
-
-        result = send_reply_notification(
-            lead_email=lead_email,
-            lead_first_name=extracted["lead_first_name"],
-            lead_last_name=extracted["lead_last_name"],
-            campaign_name=extracted["campaign_name"],
-            campaign_id=incoming_campaign_id,
-            reply_body=extracted["reply_body"],
-            reply_time=extracted["reply_time"],
-            smartlead_lead_url=extracted["smartlead_lead_url"]
-        )
-
-        return jsonify({"status": "processed", "notification_result": result}), 200
-    except Exception as err:
-        logger.error(f"Error handling webhook: {err}")
-        return jsonify({"status": "error", "error": str(err)}), 200
-
-@app.errorhandler(404)
-def handle_404(e):
-    return process_all_requests()
+    return jsonify({"status": "processed", "notification_result": result}), 200
 
 # Vercel entrypoint export
 handler = app
