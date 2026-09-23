@@ -223,6 +223,11 @@ def extract_payload_data(payload: dict) -> dict:
 ALL_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"]
 
 @app.route("/", defaults={"path": ""}, methods=ALL_METHODS)
+@app.route("/webhook/smartlead", methods=ALL_METHODS)
+@app.route("/api", methods=ALL_METHODS)
+@app.route("/api/index", methods=ALL_METHODS)
+@app.route("/api/index.py", methods=ALL_METHODS)
+@app.route("/api/webhook/smartlead", methods=ALL_METHODS)
 @app.route("/<path:path>", methods=ALL_METHODS)
 def process_all_requests(path=""):
     try:
@@ -297,6 +302,10 @@ def process_all_requests(path=""):
     except Exception as err:
         logger.error(f"Error handling webhook: {err}")
         return jsonify({"status": "error", "error": str(err)}), 200
+
+@app.errorhandler(404)
+def handle_404(e):
+    return process_all_requests()
 
 # Vercel entrypoint export
 handler = app
