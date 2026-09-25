@@ -144,29 +144,29 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
 
     try:
         if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
         else:
-            server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
             server.starttls()
 
         server.login(smtp_user, smtp_password)
 
-        for recipient in recipients:
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = subject
-                msg["From"] = f"{sender_name} <{sender_email}>"
-                msg["To"] = recipient
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{sender_name} <{sender_email}>"
+        msg["To"] = ", ".join(recipients)
 
-                msg.attach(MIMEText(plain_body, "plain", "utf-8"))
-                msg.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-                server.sendmail(sender_email, recipient, msg.as_string())
-                successful_sends.append(recipient)
-            except Exception as send_err:
-                failed_sends.append({"recipient": recipient, "error": str(send_err)})
+        refused = server.sendmail(sender_email, recipients, msg.as_string())
+        successful_sends = [r for r in recipients if r not in refused]
+        failed_sends = [{"recipient": r, "error": str(refused[r])} for r in refused]
 
-        server.quit()
+        try:
+            server.quit()
+        except Exception:
+            pass
     except Exception as smtp_err:
         return {"status": "error", "message": f"SMTP Connection failed: {smtp_err}"}
 
@@ -174,34 +174,72 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
 
 def extract_payload_data(payload: dict) -> dict:
     data = payload.get("data", payload) if isinstance(payload, dict) else {}
-    lead = data.get("lead", {}) if isinstance(data, dict) else {}
+    lead = data.get("lead", {}) if isinstance(data, dict) and isinstance(data.get("lead"), dict) else {}
+    reply = data.get("reply", {}) if isinstance(data, dict) and isinstance(data.get("reply"), dict) else {}
 
-    raw_campaign_id = data.get("campaign_id") or payload.get("campaign_id") or data.get("campaignId")
+    raw_campaign_id = (
+        data.get("campaign_id")
+        or payload.get("campaign_id")
+        or data.get("campaignId")
+        or data.get("email_campaign_id")
+        or payload.get("email_campaign_id")
+    )
     campaign_id = str(raw_campaign_id).strip() if raw_campaign_id is not None else ""
     campaign_name = data.get("campaign_name") or payload.get("campaign_name") or data.get("campaignName")
 
+    # Smartlead EMAIL_REPLY can put lead email in to_email, lead.email, lead_email, or from_email
     lead_email = (
-        data.get("from_email")
+        lead.get("email")
         or data.get("lead_email")
-        or lead.get("email")
-        or data.get("email")
+        or data.get("to_email")
+        or payload.get("lead_email")
+        or payload.get("to_email")
+        or data.get("from_email")
         or payload.get("from_email")
+        or data.get("email")
     )
 
-    lead_first_name = data.get("lead_first_name") or lead.get("first_name") or data.get("first_name")
-    lead_last_name = data.get("lead_last_name") or lead.get("last_name") or data.get("last_name")
+    lead_first_name = (
+        lead.get("first_name")
+        or data.get("lead_first_name")
+        or data.get("to_name")
+        or data.get("first_name")
+    )
+    lead_last_name = (
+        lead.get("last_name")
+        or data.get("lead_last_name")
+        or data.get("last_name")
+    )
 
     reply_body = (
-        data.get("reply_text")
+        reply.get("body")
+        or reply.get("text")
+        or data.get("reply_text")
         or data.get("reply_body")
         or data.get("text")
         or data.get("body")
         or data.get("email_body")
         or payload.get("reply_text")
+        or payload.get("body")
     )
 
-    reply_time = data.get("sent_time") or data.get("timestamp") or data.get("created_at") or payload.get("sent_time")
-    smartlead_lead_url = data.get("sl_lead_url") or data.get("lead_url") or data.get("url") or payload.get("sl_lead_url")
+    reply_time = (
+        reply.get("received_at")
+        or data.get("sent_time")
+        or data.get("timestamp")
+        or data.get("created_at")
+        or payload.get("sent_time")
+        or payload.get("timestamp")
+    )
+
+    lead_id = data.get("lead_id") or payload.get("lead_id") or lead.get("id")
+    smartlead_lead_url = (
+        data.get("sl_lead_url")
+        or data.get("lead_url")
+        or data.get("url")
+        or payload.get("sl_lead_url")
+        or (f"https://app.smartlead.ai/app/campaigns/lead-details?lead_id={lead_id}" if lead_id else "")
+    )
 
     return {
         "campaign_id": campaign_id,

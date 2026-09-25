@@ -194,37 +194,31 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
             "recipients_attempted": recipients,
         }
 
-    successful_sends = []
-    failed_sends = []
-
     try:
-        # Establish SMTP connection
         if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
         else:
-            server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
             server.starttls()
 
         server.login(smtp_user, smtp_password)
 
-        for recipient in recipients:
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = subject
-                msg["From"] = f"{sender_name} <{sender_email}>"
-                msg["To"] = recipient
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{sender_name} <{sender_email}>"
+        msg["To"] = ", ".join(recipients)
 
-                msg.attach(MIMEText(plain_body, "plain", "utf-8"))
-                msg.attach(MIMEText(html_body, "html", "utf-8"))
+        msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-                server.sendmail(sender_email, recipient, msg.as_string())
-                successful_sends.append(recipient)
-                logger.info(f"Successfully sent reply notification to {recipient}")
-            except Exception as send_err:
-                logger.error(f"Failed sending notification to {recipient}: {send_err}")
-                failed_sends.append({"recipient": recipient, "error": str(send_err)})
+        refused = server.sendmail(sender_email, recipients, msg.as_string())
+        successful_sends = [r for r in recipients if r not in refused]
+        failed_sends = [{"recipient": r, "error": str(refused[r])} for r in refused]
 
-        server.quit()
+        try:
+            server.quit()
+        except Exception:
+            pass
     except Exception as smtp_err:
         logger.error(f"SMTP Connection/Auth Error: {smtp_err}")
         return {

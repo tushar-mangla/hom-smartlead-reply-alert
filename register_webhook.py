@@ -5,8 +5,8 @@ from config import Config
 SMARTLEAD_BASE_URL = "https://server.smartlead.ai/api/v1"
 
 def register_webhook_in_smartlead(webhook_url: str, campaign_id: str = None):
-    api_key = Config.SMARTLEAD_API_KEY
-    target_campaign_id = campaign_id or Config.CAMPAIGN_ID
+    api_key = Config.SMARTLEAD_API_KEY()
+    target_campaign_id = campaign_id or Config.CAMPAIGN_ID()
 
     if not api_key:
         print("❌ Error: SMARTLEAD_API_KEY is missing in your .env file.")
@@ -27,6 +27,7 @@ def register_webhook_in_smartlead(webhook_url: str, campaign_id: str = None):
 
     params = {"api_key": api_key}
     payload = {
+        "name": "Reply Alert Notifier",
         "webhook_url": webhook_url,
         "event_types": ["EMAIL_REPLY"]
     }
