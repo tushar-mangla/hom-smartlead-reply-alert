@@ -29,7 +29,7 @@ def send_test_webhook():
         headers["X-Webhook-Secret"] = secret
 
     try:
-        response = requests.post(vercel_url, json=mock_payload, headers=headers, timeout=15)
+        response = requests.post(vercel_url, json=mock_payload, headers=headers, timeout=30)
         print(f"Status Code: {response.status_code}")
         print(f"Response Body:\n{json.dumps(response.json(), indent=2)}\n")
         if response.status_code == 200:
