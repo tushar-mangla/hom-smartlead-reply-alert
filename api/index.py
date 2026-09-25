@@ -39,8 +39,13 @@ class Config:
 
     @classmethod
     def get_recipient_emails(cls) -> List[str]:
-        # Restricted to tushar.mangla1120@gmail.com only for testing
-        return ["tushar.mangla1120@gmail.com"]
+        raw = safe_str(
+            os.getenv("RECIPIENT_EMAILS"),
+            "vivekans2016@gmail.com,tushar.mangla1120@gmail.com,kshitiz100mit@gmail.com"
+        )
+        if not raw:
+            return []
+        return [email.strip() for email in raw.split(",") if email.strip()]
 
     @classmethod
     def SMTP_HOST(cls) -> str:
@@ -203,10 +208,11 @@ def send_reply_notification(
     reply_body: Optional[str] = None,
     reply_time: Optional[str] = None,
     smartlead_lead_url: Optional[str] = None,
-    lead_id: Optional[str] = None
+    lead_id: Optional[str] = None,
+    recipients: Optional[List[str]] = None
 ) -> Dict[str, Any]:
-    recipients = Config.get_recipient_emails()
-    if not recipients:
+    active_recipients = recipients or Config.get_recipient_emails()
+    if not active_recipients:
         return {"status": "error", "message": "No recipients configured"}
 
     thread = fetch_lead_thread(campaign_id=campaign_id, lead_id=lead_id, lead_email=lead_email)
@@ -293,13 +299,13 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = f"{sender_name} <{sender_email}>"
-        msg["To"] = ", ".join(recipients)
+        msg["To"] = ", ".join(active_recipients)
 
         msg.attach(MIMEText(plain_body, "plain", "utf-8"))
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        refused = server.sendmail(sender_email, recipients, msg.as_string())
-        successful_sends = [r for r in recipients if r not in refused]
+        refused = server.sendmail(sender_email, active_recipients, msg.as_string())
+        successful_sends = [r for r in active_recipients if r not in refused]
         failed_sends = [{"recipient": r, "error": str(refused[r])} for r in refused]
 
         try:
@@ -436,6 +442,15 @@ def smartlead_webhook():
     if not lead_email:
         return jsonify({"status": "ignored", "message": "No lead email in payload"}), 200
 
+    # When testing, pass only tushar.mangla1120@gmail.com
+    # Normal Smartlead replies will dispatch to all configured recipients
+    is_test = (
+        request.args.get("test") in ["true", "1"]
+        or payload.get("test") is True
+        or request.headers.get("X-Test-Recipient") is not None
+    )
+    test_recipients = ["tushar.mangla1120@gmail.com"] if is_test else None
+
     result = send_reply_notification(
         lead_email=lead_email,
         lead_first_name=extracted["lead_first_name"],
@@ -445,7 +460,8 @@ def smartlead_webhook():
         reply_body=extracted["reply_body"],
         reply_time=extracted["reply_time"],
         smartlead_lead_url=extracted["smartlead_lead_url"],
-        lead_id=extracted.get("lead_id")
+        lead_id=extracted.get("lead_id"),
+        recipients=test_recipients
     )
 
     return jsonify({"status": "processed", "notification_result": result}), 200

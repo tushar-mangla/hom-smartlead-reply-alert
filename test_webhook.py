@@ -15,7 +15,8 @@ def send_test_webhook():
         "lead_last_name": "Connor",
         "reply_text": "Hi Team,\n\nThanks for reaching out! We are interested in painting services and would love to see pricing details and discuss availability for a quick 15-min call this Thursday.\n\nBest regards,\nSarah",
         "sent_time": "2026-09-15 10:30:00 UTC",
-        "sl_lead_url": "https://app.smartlead.ai/app/campaigns/lead-details?lead_id=987654"
+        "sl_lead_url": "https://app.smartlead.ai/app/campaigns/lead-details?lead_id=987654",
+        "test": True
     }
 
     print(f"\n🚀 Sending mock Smartlead reply webhook to Vercel: {vercel_url}")

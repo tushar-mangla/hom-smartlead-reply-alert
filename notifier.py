@@ -147,14 +147,15 @@ def send_reply_notification(
     reply_time: Optional[str] = None,
     smartlead_lead_url: Optional[str] = None,
     lead_id: Optional[str] = None,
+    recipients: Optional[List[str]] = None,
     additional_payload: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Sends notification email to all recipients listed in Config.get_recipient_emails(),
     including the latest reply and the entire email conversation thread.
     """
-    recipients = Config.get_recipient_emails()
-    if not recipients:
+    active_recipients = recipients or Config.get_recipient_emails()
+    if not active_recipients:
         logger.warning("No recipient emails configured in RECIPIENT_EMAILS env variable.")
         return {"status": "error", "message": "No recipients configured"}
 
@@ -329,7 +330,7 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
         return {
             "status": "error",
             "message": "SMTP credentials missing in environment (.env or Vercel). Please set SMTP_USER and SMTP_PASSWORD.",
-            "recipients_attempted": recipients,
+            "recipients_attempted": active_recipients,
         }
 
     try:
@@ -344,13 +345,13 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = f"{sender_name} <{sender_email}>"
-        msg["To"] = ", ".join(recipients)
+        msg["To"] = ", ".join(active_recipients)
 
         msg.attach(MIMEText(plain_body, "plain", "utf-8"))
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-        refused = server.sendmail(sender_email, recipients, msg.as_string())
-        successful_sends = [r for r in recipients if r not in refused]
+        refused = server.sendmail(sender_email, active_recipients, msg.as_string())
+        successful_sends = [r for r in active_recipients if r not in refused]
         failed_sends = [{"recipient": r, "error": str(refused[r])} for r in refused]
 
         try:
@@ -363,7 +364,7 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
             "status": "error",
             "message": f"SMTP Connection failed: {smtp_err}",
             "successful": [],
-            "failed": recipients
+            "failed": active_recipients
         }
 
     return {

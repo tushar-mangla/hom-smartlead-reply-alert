@@ -163,6 +163,14 @@ def smartlead_webhook():
         logger.warning("No lead email found in webhook payload.")
         return jsonify({"status": "ignored", "message": "No lead email in payload"}), 200
 
+    # When testing, pass only tushar.mangla1120@gmail.com
+    is_test = (
+        request.args.get("test") in ["true", "1"]
+        or payload.get("test") is True
+        or request.headers.get("X-Test-Recipient") is not None
+    )
+    test_recipients = ["tushar.mangla1120@gmail.com"] if is_test else None
+
     # Dispatch Email Notifications
     result = send_reply_notification(
         lead_email=lead_email,
@@ -174,6 +182,7 @@ def smartlead_webhook():
         reply_time=extracted["reply_time"],
         smartlead_lead_url=extracted["smartlead_lead_url"],
         lead_id=extracted.get("lead_id"),
+        recipients=test_recipients,
         additional_payload=payload
     )
 
