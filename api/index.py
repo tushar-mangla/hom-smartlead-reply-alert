@@ -1,5 +1,8 @@
 import os
 import sys
+import re
+import html
+import requests
 import smtplib
 import logging
 from typing import List, Dict, Any, Optional
