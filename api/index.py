@@ -39,13 +39,8 @@ class Config:
 
     @classmethod
     def get_recipient_emails(cls) -> List[str]:
-        raw = safe_str(
-            os.getenv("RECIPIENT_EMAILS"),
-            "tushar.mangla1120@gmail.com"
-        )
-        if not raw:
-            return []
-        return [email.strip() for email in raw.split(",") if email.strip()]
+        # Restricted to tushar.mangla1120@gmail.com only for testing
+        return ["tushar.mangla1120@gmail.com"]
 
     @classmethod
     def SMTP_HOST(cls) -> str:
