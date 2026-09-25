@@ -291,11 +291,20 @@ Smartlead Link: {smartlead_lead_url or 'N/A'}
     failed_sends = []
 
     try:
-        if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=20)
-        else:
-            server = smtplib.SMTP(smtp_host, smtp_port, timeout=20)
-            server.starttls()
+        server = None
+        try:
+            if smtp_port == 465:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10)
+            else:
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
+                server.starttls()
+        except Exception:
+            alt_port = 587 if smtp_port == 465 else 465
+            if alt_port == 465:
+                server = smtplib.SMTP_SSL(smtp_host, alt_port, timeout=10)
+            else:
+                server = smtplib.SMTP(smtp_host, alt_port, timeout=10)
+                server.starttls()
 
         server.login(smtp_user, smtp_password)
 
