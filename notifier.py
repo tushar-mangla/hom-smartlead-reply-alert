@@ -1,3 +1,6 @@
+import re
+import html
+import requests
 import smtplib
 import logging
 from email.mime.text import MIMEText
@@ -8,6 +11,132 @@ from config import Config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+def html_to_plain(raw_html: str) -> str:
+    if not raw_html:
+        return ""
+    text = re.sub(r'<br\s*\/?>', '\n', raw_html, flags=re.IGNORECASE)
+    text = re.sub(r'<\/p>|<\/div>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', '', text)
+    text = html.unescape(text)
+    return re.sub(r'\n\s*\n+', '\n\n', text).strip()
+
+def fetch_lead_thread(
+    campaign_id: Optional[str] = None,
+    lead_id: Optional[str] = None,
+    lead_email: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    api_key = Config.SMARTLEAD_API_KEY()
+    if not api_key:
+        return []
+
+    # If lead_id is missing, look it up by lead_email
+    if not lead_id and lead_email:
+        try:
+            r = requests.get(
+                "https://server.smartlead.ai/api/v1/leads/",
+                params={"api_key": api_key, "email": lead_email.strip()},
+                timeout=8
+            )
+            if r.status_code == 200:
+                data = r.json()
+                lead_id = str(data.get("id")) if data.get("id") else None
+        except Exception as e:
+            logger.warning(f"Could not lookup lead by email for thread history: {e}")
+
+    if not lead_id or not campaign_id:
+        return []
+
+    try:
+        url = f"https://server.smartlead.ai/api/v1/campaigns/{campaign_id}/leads/{lead_id}/message-history"
+        r = requests.get(url, params={"api_key": api_key}, timeout=8)
+        if r.status_code == 200:
+            data = r.json()
+            history = data.get("history", []) if isinstance(data, dict) else []
+            # Keep customer replies and sent campaign sequence emails
+            return [m for m in history if m.get("type") in ["SENT", "REPLY"]]
+    except Exception as e:
+        logger.warning(f"Could not fetch message history: {e}")
+
+    return []
+
+def format_thread_html(thread: List[Dict[str, Any]]) -> str:
+    if not thread:
+        return ""
+    cards = []
+    for idx, msg in enumerate(thread, 1):
+        m_type = msg.get("type", "").upper()
+        time_str = msg.get("time", "")
+        sender = msg.get("from", "")
+        recipient = msg.get("to", "")
+        subject = msg.get("subject") or ""
+        seq = msg.get("email_seq_number")
+        raw_body = msg.get("email_body") or ""
+        clean_body = re.sub(r'<\/?(html|head|meta|body)[^>]*>', '', raw_body, flags=re.IGNORECASE).strip()
+
+        if m_type == "REPLY":
+            badge_bg = "#dcfce7"
+            badge_color = "#15803d"
+            badge_text = "📥 Lead Reply"
+            card_border = "#22c55e"
+            card_bg = "#f0fdf4"
+        else:
+            seq_label = f" (Step #{seq})" if seq else ""
+            badge_bg = "#e0e7ff"
+            badge_color = "#3730a3"
+            badge_text = f"📤 Outbound Email{seq_label}"
+            card_border = "#cbd5e1"
+            card_bg = "#f8fafc"
+
+        cards.append(f"""
+        <div style="border: 1px solid {card_border}; border-radius: 8px; margin-bottom: 16px; background: {card_bg}; overflow: hidden;">
+            <div style="padding: 10px 16px; background: #ffffff; border-bottom: 1px solid {card_border}; font-size: 12px; color: #64748b;">
+                <span style="background: {badge_bg}; color: {badge_color}; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-right: 8px;">{badge_text}</span>
+                <strong>From:</strong> {sender} &rarr; <strong>To:</strong> {recipient}
+                <span style="float: right; color: #94a3b8;">{time_str}</span>
+            </div>
+            {f'<div style="padding: 8px 16px 0 16px; font-size: 13px; font-weight: 600; color: #334155;">Subject: {html.escape(subject)}</div>' if subject else ''}
+            <div style="padding: 12px 16px; font-size: 14px; line-height: 1.5; color: #1e293b;">
+                {clean_body}
+            </div>
+        </div>
+        """)
+
+    return f"""
+    <div style="margin-top: 32px; border-top: 2px dashed #cbd5e1; padding-top: 24px;">
+        <h3 style="font-size: 16px; color: #1e293b; margin: 0 0 16px 0; font-weight: 700;">
+            📜 Full Email Conversation Thread ({len(thread)} message{'s' if len(thread) > 1 else ''})
+        </h3>
+        {''.join(cards)}
+    </div>
+    """
+
+def format_thread_plain(thread: List[Dict[str, Any]]) -> str:
+    if not thread:
+        return ""
+    lines = [
+        "\n==================================================",
+        f"📜 FULL EMAIL CONVERSATION THREAD ({len(thread)} messages):",
+        "=================================================="
+    ]
+    for idx, msg in enumerate(thread, 1):
+        m_type = msg.get("type", "").upper()
+        time_str = msg.get("time", "")
+        sender = msg.get("from", "")
+        recipient = msg.get("to", "")
+        subject = msg.get("subject") or "No Subject"
+        seq = msg.get("email_seq_number")
+        raw_body = msg.get("email_body") or ""
+        body_text = html_to_plain(raw_body)
+        tag = "📥 LEAD REPLY" if m_type == "REPLY" else f"📤 OUTBOUND (Step #{seq})"
+        lines.append(f"\n--- [{idx}] {tag} ---")
+        lines.append(f"Time: {time_str}")
+        lines.append(f"From: {sender} -> To: {recipient}")
+        if subject and subject != "No Subject":
+            lines.append(f"Subject: {subject}")
+        lines.append(f"\n{body_text}\n")
+    lines.append("==================================================")
+    return "\n".join(lines)
+
 def send_reply_notification(
     lead_email: str,
     lead_first_name: Optional[str] = None,
@@ -17,15 +146,22 @@ def send_reply_notification(
     reply_body: Optional[str] = None,
     reply_time: Optional[str] = None,
     smartlead_lead_url: Optional[str] = None,
+    lead_id: Optional[str] = None,
     additional_payload: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
-    Sends notification email to all recipients listed in Config.get_recipient_emails().
+    Sends notification email to all recipients listed in Config.get_recipient_emails(),
+    including the latest reply and the entire email conversation thread.
     """
     recipients = Config.get_recipient_emails()
     if not recipients:
         logger.warning("No recipient emails configured in RECIPIENT_EMAILS env variable.")
         return {"status": "error", "message": "No recipients configured"}
+
+    # Fetch full thread from Smartlead API
+    thread = fetch_lead_thread(campaign_id=campaign_id, lead_id=lead_id, lead_email=lead_email)
+    thread_html = format_thread_html(thread)
+    thread_plain = format_thread_plain(thread)
 
     smtp_user = Config.SMTP_USER()
     smtp_password = Config.SMTP_PASSWORD()
@@ -160,6 +296,7 @@ def send_reply_notification(
                 <div class="reply-box">{clean_reply_body}</div>
 
                 {f'<a href="{smartlead_lead_url}" class="button" target="_blank">View Lead in Smartlead &rarr;</a>' if smartlead_lead_url else ''}
+                {thread_html}
             </div>
             <div class="footer">
                 Automated alert sent by Smartlead Reply Notifier
@@ -183,6 +320,7 @@ Reply Text:
 ----------------------------------------
 
 Smartlead Link: {smartlead_lead_url or 'N/A'}
+{thread_plain}
     """
 
     # Check if SMTP configuration is set

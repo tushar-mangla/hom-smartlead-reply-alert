@@ -103,6 +103,7 @@ def extract_payload_data(payload: dict) -> dict:
         "reply_body": reply_body,
         "reply_time": reply_time,
         "smartlead_lead_url": smartlead_lead_url,
+        "lead_id": lead_id,
         "event_type": event_type
     }
 
@@ -172,6 +173,7 @@ def smartlead_webhook():
         reply_body=extracted["reply_body"],
         reply_time=extracted["reply_time"],
         smartlead_lead_url=extracted["smartlead_lead_url"],
+        lead_id=extracted.get("lead_id"),
         additional_payload=payload
     )
 

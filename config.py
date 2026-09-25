@@ -31,7 +31,7 @@ class Config:
     def get_recipient_emails(cls) -> List[str]:
         raw = safe_str(
             os.getenv("RECIPIENT_EMAILS"),
-            "vivekans2016@gmail.com,tushar.mangla1120@gmail.com,kshitiz100mit@gmail.com"
+            "tushar.mangla1120@gmail.com"
         )
         if not raw:
             return []
